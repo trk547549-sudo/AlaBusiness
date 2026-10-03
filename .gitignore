@@ -1,0 +1,7 @@
+.gradle/
+**/build/
+server/*.db
+*.backup.java
+*.before-api.java
+*.before-whatsapp.py
+server/app.backup.py
