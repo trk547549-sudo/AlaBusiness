@@ -294,7 +294,7 @@ public class MainActivity extends Activity {
                                     button("👤 " + name);
 
                             customerButton.setOnClickListener(v ->
-                                    showChat(id, name, customer.getString("phone"))
+                                    showChat(id, name, phone)
                             );
 
                             content.addView(customerButton);
