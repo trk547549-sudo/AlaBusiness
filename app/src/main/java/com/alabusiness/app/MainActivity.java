@@ -5,7 +5,6 @@ import android.os.Bundle;
 import android.graphics.Color;
 import android.graphics.Typeface;
 import android.view.Gravity;
-import android.view.View;
 import android.widget.Button;
 import android.widget.EditText;
 import android.widget.LinearLayout;
@@ -29,7 +28,8 @@ public class MainActivity extends Activity {
 
     private static final String SERVER = "http://127.0.0.1:5050";
 
-    private final ExecutorService executor = Executors.newSingleThreadExecutor();
+    private final ExecutorService executor =
+            Executors.newSingleThreadExecutor();
 
     private LinearLayout root;
     private LinearLayout content;
@@ -38,11 +38,13 @@ public class MainActivity extends Activity {
     private int currentCustomerId = -1;
     private String currentCustomerName = "";
 
+    private String authToken = null;
+    private String username = "";
+
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
-
-        showCustomers();
+        showLogin();
     }
 
     private TextView text(String value, float size) {
@@ -93,19 +95,184 @@ public class MainActivity extends Activity {
         return b;
     }
 
+    private void showLogin() {
+        base("🔐 تسجيل الدخول");
+
+        EditText user = new EditText(this);
+        user.setHint("اسم المستخدم");
+        user.setTextSize(18);
+
+        EditText password = new EditText(this);
+        password.setHint("كلمة المرور");
+        password.setTextSize(18);
+        password.setInputType(
+                android.text.InputType.TYPE_CLASS_TEXT |
+                android.text.InputType.TYPE_TEXT_VARIATION_PASSWORD
+        );
+
+        content.addView(user);
+        content.addView(password);
+
+        Button login = button("🔐 تسجيل الدخول");
+
+        login.setOnClickListener(v -> {
+            String u = user.getText().toString().trim();
+            String p = password.getText().toString();
+
+            if (u.isEmpty() || p.isEmpty()) {
+                showError("اكتب اسم المستخدم وكلمة المرور");
+                return;
+            }
+
+            JSONObject data = new JSONObject();
+
+            try {
+                data.put("username", u);
+                data.put("password", p);
+            } catch (Exception e) {
+                showError("خطأ في البيانات");
+                return;
+            }
+
+            executor.execute(() -> {
+                try {
+                    String response = request(
+                            "POST",
+                            SERVER + "/api/login",
+                            data.toString(),
+                            null
+                    );
+
+                    JSONObject result = new JSONObject(response);
+
+                    authToken = result.getString("token");
+                    username = result.getString("username");
+
+                    runOnUiThread(this::showCustomers);
+
+                } catch (Exception e) {
+                    runOnUiThread(() ->
+                            showError("فشل تسجيل الدخول:\n" + e.getMessage())
+                    );
+                }
+            });
+        });
+
+        content.addView(login);
+
+        Button register = button("👤 إنشاء حساب جديد");
+        register.setOnClickListener(v -> showRegister());
+
+        content.addView(register);
+    }
+
+    private void showRegister() {
+        base("👤 إنشاء حساب");
+
+        EditText user = new EditText(this);
+        user.setHint("اسم المستخدم");
+        user.setTextSize(18);
+
+        EditText password = new EditText(this);
+        password.setHint("كلمة المرور - 6 أحرف على الأقل");
+        password.setTextSize(18);
+        password.setInputType(
+                android.text.InputType.TYPE_CLASS_TEXT |
+                android.text.InputType.TYPE_TEXT_VARIATION_PASSWORD
+        );
+
+        content.addView(user);
+        content.addView(password);
+
+        Button create = button("✅ إنشاء الحساب");
+
+        create.setOnClickListener(v -> {
+            String u = user.getText().toString().trim();
+            String p = password.getText().toString();
+
+            if (u.length() < 3) {
+                showError("اسم المستخدم يجب أن يكون 3 أحرف على الأقل");
+                return;
+            }
+
+            if (p.length() < 6) {
+                showError("كلمة المرور يجب أن تكون 6 أحرف على الأقل");
+                return;
+            }
+
+            JSONObject data = new JSONObject();
+
+            try {
+                data.put("username", u);
+                data.put("password", p);
+            } catch (Exception e) {
+                showError("خطأ في البيانات");
+                return;
+            }
+
+            executor.execute(() -> {
+                try {
+                    request(
+                            "POST",
+                            SERVER + "/api/register",
+                            data.toString(),
+                            null
+                    );
+
+                    runOnUiThread(() -> {
+                        Toast.makeText(
+                                this,
+                                "تم إنشاء الحساب. سجل الدخول الآن.",
+                                Toast.LENGTH_LONG
+                        ).show();
+
+                        showLogin();
+                    });
+
+                } catch (Exception e) {
+                    runOnUiThread(() ->
+                            showError("فشل إنشاء الحساب:\n" + e.getMessage())
+                    );
+                }
+            });
+        });
+
+        content.addView(create);
+
+        Button back = button("↩ العودة لتسجيل الدخول");
+        back.setOnClickListener(v -> showLogin());
+        content.addView(back);
+    }
+
     private void showCustomers() {
         base("💬 AlaBusiness");
+
+        content.addView(text(
+                "👤 المستخدم: " + username,
+                17
+        ));
 
         TextView loading = text("جاري تحميل العملاء...", 18);
         content.addView(loading);
 
         executor.execute(() -> {
             try {
-                String response = request("GET", SERVER + "/api/customers", null);
+                String response = request(
+                        "GET",
+                        SERVER + "/api/customers",
+                        null,
+                        authToken
+                );
+
                 JSONArray customers = new JSONArray(response);
 
                 runOnUiThread(() -> {
                     content.removeAllViews();
+
+                    content.addView(text(
+                            "👤 المستخدم: " + username,
+                            17
+                    ));
 
                     if (customers.length() == 0) {
                         content.addView(text(
@@ -116,19 +283,22 @@ public class MainActivity extends Activity {
 
                     for (int i = 0; i < customers.length(); i++) {
                         try {
-                            JSONObject customer = customers.getJSONObject(i);
+                            JSONObject customer =
+                                    customers.getJSONObject(i);
 
                             int id = customer.getInt("id");
-                            String name = customer.getString("name");
+                            String name =
+                                    customer.getString("name");
 
                             Button customerButton =
                                     button("👤 " + name);
 
                             customerButton.setOnClickListener(v ->
-                                    showChat(id, name)
+                                    showChat(id, name, customer.getString("phone"))
                             );
 
                             content.addView(customerButton);
+
                         } catch (Exception ignored) {
                         }
                     }
@@ -136,6 +306,10 @@ public class MainActivity extends Activity {
                     Button add = button("➕ إضافة عميل");
                     add.setOnClickListener(v -> showAddCustomer());
                     content.addView(add);
+
+                    Button logout = button("🚪 تسجيل الخروج");
+                    logout.setOnClickListener(v -> logout());
+                    content.addView(logout);
                 });
 
             } catch (Exception e) {
@@ -146,6 +320,25 @@ public class MainActivity extends Activity {
         });
     }
 
+    private void logout() {
+        executor.execute(() -> {
+            try {
+                request(
+                        "POST",
+                        SERVER + "/api/logout",
+                        null,
+                        authToken
+                );
+            } catch (Exception ignored) {
+            }
+
+            authToken = null;
+            username = "";
+
+            runOnUiThread(this::showLogin);
+        });
+    }
+
     private void showAddCustomer() {
         base("➕ إضافة عميل");
 
@@ -153,19 +346,24 @@ public class MainActivity extends Activity {
         name.setHint("اسم العميل");
         name.setTextSize(18);
 
+        EditText phone = new EditText(this);
+        phone.setHint("رقم الهاتف");
+        phone.setTextSize(18);
+
         content.addView(name);
+        content.addView(phone);
 
         Button save = button("حفظ العميل");
 
         save.setOnClickListener(v -> {
-            String customerName = name.getText().toString().trim();
+            String customerName =
+                    name.getText().toString().trim();
+
+            String customerPhone =
+                    phone.getText().toString().trim();
 
             if (customerName.isEmpty()) {
-                Toast.makeText(
-                        this,
-                        "اكتب اسم العميل",
-                        Toast.LENGTH_SHORT
-                ).show();
+                showError("اكتب اسم العميل");
                 return;
             }
 
@@ -173,6 +371,7 @@ public class MainActivity extends Activity {
 
             try {
                 data.put("name", customerName);
+                data.put("phone", customerPhone);
             } catch (Exception e) {
                 return;
             }
@@ -182,7 +381,8 @@ public class MainActivity extends Activity {
                     request(
                             "POST",
                             SERVER + "/api/customers",
-                            data.toString()
+                            data.toString(),
+                            authToken
                     );
 
                     runOnUiThread(this::showCustomers);
@@ -202,9 +402,12 @@ public class MainActivity extends Activity {
         content.addView(back);
     }
 
-    private void showChat(int customerId, String customerName) {
+    private String currentCustomerPhone = "";
+
+    private void showChat(int customerId, String customerName, String customerPhone) {
         currentCustomerId = customerId;
         currentCustomerName = customerName;
+        currentCustomerPhone = customerPhone;
 
         base("💬 " + customerName);
 
@@ -245,8 +448,15 @@ public class MainActivity extends Activity {
                                 "UTF-8"
                         );
 
-                String response = request("GET", url, null);
-                JSONArray messages = new JSONArray(response);
+                String response = request(
+                        "GET",
+                        url,
+                        null,
+                        authToken
+                );
+
+                JSONArray messages =
+                        new JSONArray(response);
 
                 runOnUiThread(() -> {
                     content.removeAllViews();
@@ -286,7 +496,9 @@ public class MainActivity extends Activity {
     }
 
     private void sendMessage() {
-        if (currentCustomerId == -1 || messageInput == null) {
+        if (currentCustomerId == -1 ||
+                messageInput == null ||
+                authToken == null) {
             return;
         }
 
@@ -300,7 +512,7 @@ public class MainActivity extends Activity {
         JSONObject data = new JSONObject();
 
         try {
-            data.put("customer_id", currentCustomerId);
+            data.put("phone", currentCustomerPhone);
             data.put("text", message);
         } catch (Exception e) {
             return;
@@ -310,8 +522,9 @@ public class MainActivity extends Activity {
             try {
                 request(
                         "POST",
-                        SERVER + "/api/messages",
-                        data.toString()
+                        SERVER + "/api/whatsapp/send",
+                        data.toString(),
+                        authToken
                 );
 
                 runOnUiThread(() -> {
@@ -330,7 +543,8 @@ public class MainActivity extends Activity {
     private String request(
             String method,
             String urlString,
-            String body
+            String body,
+            String token
     ) throws Exception {
 
         URL url = new URL(urlString);
@@ -341,10 +555,18 @@ public class MainActivity extends Activity {
         connection.setRequestMethod(method);
         connection.setConnectTimeout(5000);
         connection.setReadTimeout(5000);
+
         connection.setRequestProperty(
                 "Content-Type",
                 "application/json"
         );
+
+        if (token != null && !token.isEmpty()) {
+            connection.setRequestProperty(
+                    "Authorization",
+                    "Bearer " + token
+            );
+        }
 
         if (body != null) {
             connection.setDoOutput(true);
@@ -369,7 +591,8 @@ public class MainActivity extends Activity {
                         )
                 );
 
-        StringBuilder result = new StringBuilder();
+        StringBuilder result =
+                new StringBuilder();
 
         String line;
 

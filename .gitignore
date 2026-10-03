@@ -5,3 +5,9 @@ server/*.db
 *.before-api.java
 *.before-whatsapp.py
 server/app.backup.py
+*.accounts-backup.py
+*.accounts-backup.java
+*.whatsapp-backup.py
+*.webhook-backup.py
+__pycache__/
+*.pyc
