@@ -290,6 +290,9 @@ public class MainActivity extends Activity {
                             String name =
                                     customer.getString("name");
 
+                            String phone =
+                                    customer.getString("phone");
+
                             Button customerButton =
                                     button("👤 " + name);
 
